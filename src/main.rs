@@ -1,11 +1,19 @@
 use poise::serenity_prelude as serenity;
 
+mod dates;
+mod schedule;
 mod scraper;
 mod timetable;
-mod dates;
+
+use schedule::{Schedule, Siseveeb};
+use std::time::{Duration, Instant};
+
+const ITA25_GROUP_ID: u32 = 2078;
+const CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 
 struct Data {
-    uptime: std::time::Instant,
+    uptime: Instant,
+    schedule: Schedule,
 }
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -64,7 +72,8 @@ async fn main() {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 Ok(Data {
-                    uptime: std::time::Instant::now(),
+                    uptime: Instant::now(),
+                    schedule: Schedule::new(Siseveeb::new(ITA25_GROUP_ID)?, CACHE_TTL),
                 })
             })
         })

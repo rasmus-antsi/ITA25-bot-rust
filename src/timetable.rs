@@ -106,9 +106,24 @@ mod tests {
     #[test]
     fn new_sorts_by_start_then_subject() {
         let t = Timetable::new(vec![
-            lesson(1, "B", "2026-10-02T10:15:00+03:00", "2026-10-02T11:45:00+03:00"),
-            lesson(2, "A", "2026-10-02T10:15:00+03:00", "2026-10-02T11:45:00+03:00"),
-            lesson(3, "Z", "2026-10-02T08:30:00+03:00", "2026-10-02T10:00:00+03:00"),
+            lesson(
+                1,
+                "B",
+                "2026-10-02T10:15:00+03:00",
+                "2026-10-02T11:45:00+03:00",
+            ),
+            lesson(
+                2,
+                "A",
+                "2026-10-02T10:15:00+03:00",
+                "2026-10-02T11:45:00+03:00",
+            ),
+            lesson(
+                3,
+                "Z",
+                "2026-10-02T08:30:00+03:00",
+                "2026-10-02T10:00:00+03:00",
+            ),
         ]);
         let ids: Vec<u64> = t.lessons_on(d(2026, 10, 2)).iter().map(|l| l.id).collect();
         assert_eq!(ids, vec![3, 2, 1]);
@@ -118,8 +133,18 @@ mod tests {
     fn lessons_on_uses_the_lessons_own_local_date() {
         // 00:30 on the 3rd in +03:00 is still the 2nd in UTC; the local date must win.
         let t = Timetable::new(vec![
-            lesson(1, "Late", "2026-10-02T23:30:00+03:00", "2026-10-03T00:15:00+03:00"),
-            lesson(2, "Early", "2026-10-03T00:30:00+03:00", "2026-10-03T01:15:00+03:00"),
+            lesson(
+                1,
+                "Late",
+                "2026-10-02T23:30:00+03:00",
+                "2026-10-03T00:15:00+03:00",
+            ),
+            lesson(
+                2,
+                "Early",
+                "2026-10-03T00:30:00+03:00",
+                "2026-10-03T01:15:00+03:00",
+            ),
         ]);
         assert_eq!(t.lessons_on(d(2026, 10, 2)).len(), 1);
         assert_eq!(t.lessons_on(d(2026, 10, 3)).len(), 1);
@@ -129,7 +154,10 @@ mod tests {
     #[test]
     fn empty_day_has_no_lessons_or_slots() {
         let t = Timetable::new(vec![lesson(
-            1, "A", "2026-10-02T10:15:00+03:00", "2026-10-02T11:45:00+03:00",
+            1,
+            "A",
+            "2026-10-02T10:15:00+03:00",
+            "2026-10-02T11:45:00+03:00",
         )]);
         assert!(t.lessons_on(d(2026, 10, 5)).is_empty());
         assert!(t.slots_on(d(2026, 10, 5)).is_empty());
@@ -139,10 +167,30 @@ mod tests {
     #[test]
     fn slots_group_parallel_lessons() {
         let t = Timetable::new(vec![
-            lesson(1, "French", "2026-10-02T10:15:00+03:00", "2026-10-02T11:45:00+03:00"),
-            lesson(2, "German", "2026-10-02T10:15:00+03:00", "2026-10-02T11:45:00+03:00"),
-            lesson(3, "SQL", "2026-10-02T11:55:00+03:00", "2026-10-02T14:00:00+03:00"),
-            lesson(4, "Literature", "2026-10-02T08:30:00+03:00", "2026-10-02T10:00:00+03:00"),
+            lesson(
+                1,
+                "French",
+                "2026-10-02T10:15:00+03:00",
+                "2026-10-02T11:45:00+03:00",
+            ),
+            lesson(
+                2,
+                "German",
+                "2026-10-02T10:15:00+03:00",
+                "2026-10-02T11:45:00+03:00",
+            ),
+            lesson(
+                3,
+                "SQL",
+                "2026-10-02T11:55:00+03:00",
+                "2026-10-02T14:00:00+03:00",
+            ),
+            lesson(
+                4,
+                "Literature",
+                "2026-10-02T08:30:00+03:00",
+                "2026-10-02T10:00:00+03:00",
+            ),
         ]);
         let slots = t.slots_on(d(2026, 10, 2));
         let sizes: Vec<usize> = slots.iter().map(|s| s.lessons.len()).collect();

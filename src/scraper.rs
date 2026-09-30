@@ -3,7 +3,7 @@ use std::fmt;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
-use crate::timetable::{Lesson, Location, Timetable};
+use crate::timetable::{Lesson, Location};
 
 #[derive(Debug, Deserialize)]
 pub struct RawEvent {
@@ -147,13 +147,17 @@ impl TryFrom<RawEvent> for Lesson {
 }
 
 pub fn parse_lessons(html: &str) -> Result<Vec<Lesson>, ScrapeError> {
-    parse_page(html)?.into_iter().map(Lesson::try_from).collect()
+    parse_page(html)?
+        .into_iter()
+        .map(Lesson::try_from)
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     const FIXTURE: &str = include_str!("../tests/fixtures/ita25_week.html");
+    use crate::timetable::Timetable;
 
     #[test]
     fn finds_events() {
@@ -334,7 +338,10 @@ mod tests {
     #[test]
     fn lesson_fields_come_through() {
         let lessons = parse_lessons(FIXTURE).unwrap();
-        let l = lessons.iter().find(|l| l.id == 26219185).expect("lesson missing");
+        let l = lessons
+            .iter()
+            .find(|l| l.id == 26219185)
+            .expect("lesson missing");
         assert_eq!(l.subject, "SQL keel");
         assert_eq!(l.group, "ITA25");
         assert_eq!(l.teacher, "Evely Vutt");
@@ -380,8 +387,20 @@ mod tests {
         let sizes: Vec<usize> = slots.iter().map(|s| s.lessons.len()).collect();
         assert_eq!(sizes, vec![1, 4, 1]);
 
-        let parallel: Vec<&str> = slots[1].lessons.iter().map(|l| l.subject.as_str()).collect();
-        assert_eq!(parallel, vec!["Prantsuse keel", "Saksa keel", "Soome keel", "Stereomeetria I"]);
+        let parallel: Vec<&str> = slots[1]
+            .lessons
+            .iter()
+            .map(|l| l.subject.as_str())
+            .collect();
+        assert_eq!(
+            parallel,
+            vec![
+                "Prantsuse keel",
+                "Saksa keel",
+                "Soome keel",
+                "Stereomeetria I"
+            ]
+        );
     }
 
     #[test]
@@ -390,7 +409,10 @@ mod tests {
         assert_eq!(timetable.len(), 20);
         for day in 28..=30 {
             let date = chrono::NaiveDate::from_ymd_opt(2026, 9, day).unwrap();
-            assert!(!timetable.lessons_on(date).is_empty(), "no lessons on {date}");
+            assert!(
+                !timetable.lessons_on(date).is_empty(),
+                "no lessons on {date}"
+            );
         }
     }
 }
