@@ -3,7 +3,7 @@ use std::fmt;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
-use crate::timetable::Location;
+use crate::timetable::{Lesson, Location};
 
 #[derive(Debug, Deserialize)]
 pub struct RawEvent {
@@ -37,6 +37,7 @@ pub enum ScrapeError {
     EventsNotFound,
     Parse(json5::Error),
     BadTitle(String),
+    BadPlanId(String),
 }
 
 impl fmt::Display for ScrapeError {
@@ -45,6 +46,7 @@ impl fmt::Display for ScrapeError {
             ScrapeError::EventsNotFound => write!(f, "events array not found in page"),
             ScrapeError::Parse(e) => write!(f, "parse error: {e}"),
             ScrapeError::BadTitle(e) => write!(f, "bad title: {e}"),
+            ScrapeError::BadPlanId(id) => write!(f, "bad plan id: {id}"),
         }
     }
 }
@@ -118,6 +120,34 @@ fn split_span(s: &str) -> Option<(&str, &str)> {
     let (_, after_open) = s.split_once('>')?;
     let (text, rest) = after_open.split_once("</span>")?;
     Some((text.trim_ascii(), rest))
+}
+
+impl TryFrom<RawEvent> for Lesson {
+    type Error = ScrapeError;
+
+    fn try_from(raw: RawEvent) -> Result<Self, Self::Error> {
+        let parsed = parse_title(&raw.title)?;
+        let id = raw
+            .plan_id
+            .parse::<u64>()
+            .map_err(|_| ScrapeError::BadPlanId(raw.plan_id))?;
+
+        Ok(Lesson {
+            id,
+            subject: parsed.subject,
+            group: parsed.group,
+            teacher: parsed.teacher,
+            location: parsed.location,
+            start: raw.start,
+            end: raw.end,
+            lunch: parsed.lunch,
+            notes: parsed.notes,
+        })
+    }
+}
+
+pub fn parse_lessons(html: &str) -> Result<Vec<Lesson>, ScrapeError> {
+    parse_page(html)?.into_iter().map(Lesson::try_from).collect()
 }
 
 #[cfg(test)]
@@ -280,5 +310,64 @@ mod tests {
             split_span(r#"<span class="label label-warning">Söömine: 12:30-13:00</span>"#),
             Some(("Söömine: 12:30-13:00", ""))
         );
+    }
+
+    fn subj(name: &str) -> String {
+        format!(r#"<span class="entry_subjects bold font-bold">{name} </span>"#)
+    }
+
+    fn raw(plan_id: &str, title: &str) -> RawEvent {
+        RawEvent {
+            plan_id: plan_id.to_string(),
+            title: title.to_string(),
+            start: DateTime::parse_from_rfc3339("2026-10-02T10:15:00+03:00").unwrap(),
+            end: DateTime::parse_from_rfc3339("2026-10-02T11:45:00+03:00").unwrap(),
+            class_names: String::new(),
+        }
+    }
+
+    #[test]
+    fn converts_fixture_to_lessons() {
+        assert_eq!(parse_lessons(FIXTURE).unwrap().len(), 20);
+    }
+
+    #[test]
+    fn lesson_fields_come_through() {
+        let lessons = parse_lessons(FIXTURE).unwrap();
+        let l = lessons.iter().find(|l| l.id == 26219185).expect("lesson missing");
+        assert_eq!(l.subject, "SQL keel");
+        assert_eq!(l.group, "ITA25");
+        assert_eq!(l.teacher, "Evely Vutt");
+        assert_eq!(l.location, Location::Room("KPL - A406".to_string()));
+        assert_eq!(l.lunch.as_deref(), Some("12:30-13:00"));
+        assert_eq!(l.start.hour(), 11);
+        assert_eq!(l.start.minute(), 55);
+        assert_eq!(l.minutes(), 125);
+    }
+
+    #[test]
+    fn lesson_minutes() {
+        let l = Lesson::try_from(raw("1", &format!("{}; ITA25; T", subj("X")))).unwrap();
+        assert_eq!(l.minutes(), 90);
+    }
+
+    #[test]
+    fn non_numeric_plan_id_is_an_error() {
+        let e = Lesson::try_from(raw("abc", &format!("{}; ITA25; T", subj("X")))).unwrap_err();
+        assert!(matches!(e, ScrapeError::BadPlanId(ref id) if id == "abc"));
+    }
+
+    #[test]
+    fn bad_title_is_an_error() {
+        let e = Lesson::try_from(raw("1", "junk")).unwrap_err();
+        assert!(matches!(e, ScrapeError::BadTitle(_)));
+    }
+
+    #[test]
+    fn one_bad_event_fails_the_whole_page() {
+        let html = r#"events: [{plan_id:'1',title:'<span class="a">A </span>; G; T',start:'2026-10-02T10:15:00+03:00',end:'2026-10-02T11:45:00+03:00',classNames:''},{plan_id:'2',title:'junk',start:'2026-10-02T10:15:00+03:00',end:'2026-10-02T11:45:00+03:00',classNames:''}],
+            eventRender"#;
+        assert_eq!(parse_page(html).unwrap().len(), 2);
+        assert!(matches!(parse_lessons(html), Err(ScrapeError::BadTitle(_))));
     }
 }
