@@ -1,3 +1,5 @@
+use std::fmt;
+
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
@@ -10,6 +12,7 @@ pub struct RawEvent {
 	#[serde(rename="classNames")]
 	pub class_names: String
 }
+
 
 pub fn extract_events(mut html: &str) -> Option<&str> {
 	let start = html.find("events:")?;
@@ -27,6 +30,36 @@ pub fn extract_events(mut html: &str) -> Option<&str> {
 pub fn parse_events(events: &str) -> Result<Vec<RawEvent>, json5::Error> {
 	json5::from_str(events)
 }
+
+
+#[derive(Debug)]
+pub enum ScrapeError {
+	EventsNotFound,
+	Parse(json5::Error)
+}
+
+impl fmt::Display for ScrapeError {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			ScrapeError::EventsNotFound => write!(f, "events array not found in page"),
+		    ScrapeError::Parse(e) => write!(f, "parse error: {e}"),
+		}
+	}
+}
+
+impl std::error::Error for ScrapeError {}
+
+impl From<json5::Error> for ScrapeError {
+	fn from(value: json5::Error) -> Self {
+    	ScrapeError::Parse(value)
+	}
+}
+
+pub fn parse_page(html: &str) -> Result<Vec<RawEvent>, ScrapeError> {
+	let events = extract_events(html).ok_or(ScrapeError::EventsNotFound)?;
+	Ok(parse_events(events)?)
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -122,5 +155,34 @@ mod tests {
     fn bad_date_is_err() {
         let src = "[{plan_id:'1',title:'x',start:'not a date',end:'2026-10-25T11:00:00+02:00',classNames:''}]";
         assert!(parse_events(src).is_err());
+    }
+
+    #[test]
+    fn parse_page_reads_fixture() {
+        assert_eq!(parse_page(FIXTURE).unwrap().len(), 20);
+    }
+
+    #[test]
+    fn parse_page_without_markers() {
+        assert!(matches!(parse_page("<html></html>"), Err(ScrapeError::EventsNotFound)));
+    }
+
+    #[test]
+    fn parse_page_with_broken_array() {
+        let html = "events: [{plan_id:'1', eventRender";
+        assert!(matches!(parse_page(html), Err(ScrapeError::Parse(_))));
+    }
+
+    #[test]
+    fn error_messages() {
+        assert_eq!(ScrapeError::EventsNotFound.to_string(), "events array not found in page");
+        let e = parse_page("events: [{plan_id:'1', eventRender").unwrap_err();
+        assert!(e.to_string().starts_with("parse error:"));
+    }
+
+    #[test]
+    fn scrape_error_fits_in_boxed_error() {
+        let b: Box<dyn std::error::Error + Send + Sync> = Box::new(ScrapeError::EventsNotFound);
+        assert_eq!(b.to_string(), "events array not found in page");
     }
 }
