@@ -3,63 +3,122 @@ use std::fmt;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
+use crate::timetable::Location;
+
 #[derive(Debug, Deserialize)]
 pub struct RawEvent {
-	pub plan_id: String,
-	pub title: String,
-	pub start: DateTime<FixedOffset>,
-	pub end: DateTime<FixedOffset>,
-	#[serde(rename="classNames")]
-	pub class_names: String
+    pub plan_id: String,
+    pub title: String,
+    pub start: DateTime<FixedOffset>,
+    pub end: DateTime<FixedOffset>,
+    #[serde(rename = "classNames")]
+    pub class_names: String,
 }
 
-
 pub fn extract_events(mut html: &str) -> Option<&str> {
-	let start = html.find("events:")?;
-	html = &html[start..];
+    let start = html.find("events:")?;
+    html = &html[start..];
 
-	let end = html.find("eventRender")?;
-	html = html[..end].trim_ascii_end().strip_suffix(",")?;
+    let end = html.find("eventRender")?;
+    html = html[..end].trim_ascii_end().strip_suffix(",")?;
 
-	let start = html.find("[")?;
-	html = &html[start..];
+    let start = html.find("[")?;
+    html = &html[start..];
 
-	Some(html)
+    Some(html)
 }
 
 pub fn parse_events(events: &str) -> Result<Vec<RawEvent>, json5::Error> {
-	json5::from_str(events)
+    json5::from_str(events)
 }
-
 
 #[derive(Debug)]
 pub enum ScrapeError {
-	EventsNotFound,
-	Parse(json5::Error)
+    EventsNotFound,
+    Parse(json5::Error),
+    BadTitle(String),
 }
 
 impl fmt::Display for ScrapeError {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			ScrapeError::EventsNotFound => write!(f, "events array not found in page"),
-		    ScrapeError::Parse(e) => write!(f, "parse error: {e}"),
-		}
-	}
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ScrapeError::EventsNotFound => write!(f, "events array not found in page"),
+            ScrapeError::Parse(e) => write!(f, "parse error: {e}"),
+            ScrapeError::BadTitle(e) => write!(f, "bad title: {e}"),
+        }
+    }
 }
 
 impl std::error::Error for ScrapeError {}
 
 impl From<json5::Error> for ScrapeError {
-	fn from(value: json5::Error) -> Self {
-    	ScrapeError::Parse(value)
-	}
+    fn from(value: json5::Error) -> Self {
+        ScrapeError::Parse(value)
+    }
 }
 
 pub fn parse_page(html: &str) -> Result<Vec<RawEvent>, ScrapeError> {
-	let events = extract_events(html).ok_or(ScrapeError::EventsNotFound)?;
-	Ok(parse_events(events)?)
+    let events = extract_events(html).ok_or(ScrapeError::EventsNotFound)?;
+    Ok(parse_events(events)?)
 }
 
+#[derive(Debug, PartialEq)]
+struct ParsedTitle {
+    subject: String,
+    group: String,
+    teacher: String,
+    location: Location,
+    lunch: Option<String>,
+    notes: Vec<String>,
+}
+
+fn parse_title(title: &str) -> Result<ParsedTitle, ScrapeError> {
+    let bad = || ScrapeError::BadTitle(title.to_string());
+
+    let (subject, rest) = split_span(title).ok_or_else(bad)?;
+
+    let mut parts = rest.strip_prefix("; ").ok_or_else(bad)?.split("; ");
+
+    let group = parts.next().ok_or_else(bad)?;
+    let teacher = parts.next().ok_or_else(bad)?;
+
+    let mut location = Location::Unspecified;
+    let mut lunch = None;
+    let mut notes = Vec::new();
+
+    for part in parts {
+        if part.starts_with("<span") {
+            let (text, _) = split_span(part).ok_or_else(bad)?;
+            match text.strip_prefix("Söömine:") {
+                Some(range) => lunch = Some(range.trim().to_string()),
+                None => notes.push(text.to_string()),
+            }
+        } else if location == Location::Unspecified {
+            location = if part == "Veebiõpe" {
+                Location::Online
+            } else {
+                Location::Room(part.to_string())
+            };
+        } else {
+            notes.push(part.to_string());
+        }
+    }
+
+    Ok(ParsedTitle {
+        subject: subject.to_string(),
+        group: group.to_string(),
+        teacher: teacher.to_string(),
+        location,
+        lunch,
+        notes,
+    })
+}
+
+fn split_span(s: &str) -> Option<(&str, &str)> {
+    let (_, after_open) = s.split_once('>')?;
+    let (text, rest) = after_open.split_once("</span>")?;
+    Some((text.trim_ascii(), rest))
+}
 
 #[cfg(test)]
 mod tests {
@@ -68,7 +127,7 @@ mod tests {
 
     #[test]
     fn finds_events() {
-    	let events = extract_events(FIXTURE).expect("markers not found");
+        let events = extract_events(FIXTURE).expect("markers not found");
         assert!(events.starts_with("[{plan_id"));
         assert!(events.ends_with("}]"));
         assert_eq!(events.matches("plan_id:").count(), 20);
@@ -76,12 +135,12 @@ mod tests {
 
     #[test]
     fn missing_event_is_none() {
-       	assert_eq!(extract_events("<html></html>"), None);
+        assert_eq!(extract_events("<html></html>"), None);
     }
 
     #[test]
     fn wrong_order_is_none() {
-    	assert_eq!(extract_events("eventRender events: [{}],"), None);
+        assert_eq!(extract_events("eventRender events: [{}],"), None);
     }
 
     use chrono::Timelike;
@@ -164,7 +223,10 @@ mod tests {
 
     #[test]
     fn parse_page_without_markers() {
-        assert!(matches!(parse_page("<html></html>"), Err(ScrapeError::EventsNotFound)));
+        assert!(matches!(
+            parse_page("<html></html>"),
+            Err(ScrapeError::EventsNotFound)
+        ));
     }
 
     #[test]
@@ -175,7 +237,10 @@ mod tests {
 
     #[test]
     fn error_messages() {
-        assert_eq!(ScrapeError::EventsNotFound.to_string(), "events array not found in page");
+        assert_eq!(
+            ScrapeError::EventsNotFound.to_string(),
+            "events array not found in page"
+        );
         let e = parse_page("events: [{plan_id:'1', eventRender").unwrap_err();
         assert!(e.to_string().starts_with("parse error:"));
     }
@@ -184,5 +249,36 @@ mod tests {
     fn scrape_error_fits_in_boxed_error() {
         let b: Box<dyn std::error::Error + Send + Sync> = Box::new(ScrapeError::EventsNotFound);
         assert_eq!(b.to_string(), "events array not found in page");
+    }
+
+    #[test]
+    fn split_span_with_trailing_text() {
+        assert_eq!(
+            split_span(r#"<span class="a">Hi </span>; rest"#),
+            Some(("Hi", "; rest"))
+        );
+    }
+
+    #[test]
+    fn split_span_at_end_of_string() {
+        assert_eq!(split_span(r#"<span class="a">Hi</span>"#), Some(("Hi", "")));
+    }
+
+    #[test]
+    fn split_span_without_tags_is_none() {
+        assert_eq!(split_span("no tags"), None);
+    }
+
+    #[test]
+    fn split_span_without_attributes() {
+        assert_eq!(split_span("<span>x</span>"), Some(("x", "")));
+    }
+
+    #[test]
+    fn split_span_lunch_label() {
+        assert_eq!(
+            split_span(r#"<span class="label label-warning">Söömine: 12:30-13:00</span>"#),
+            Some(("Söömine: 12:30-13:00", ""))
+        );
     }
 }

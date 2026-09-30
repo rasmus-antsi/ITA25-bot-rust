@@ -1,16 +1,13 @@
 const FIXTURE: &str = include_str!("ita25_week_copy.html");
 
 fn main() {
-	let mut s = FIXTURE;
+    let s = "<span class=\"entry_subjects bold font-bold\">Prantsuse keel </span>; ITA25; Ksenia Mets; KPL - B206";
+    let i = s.find("</span>").unwrap();
+    let outside = &s[i + 7..].trim_ascii();
 
-	let start = s.find("events:").unwrap();
-	s = &s[start..];
+    let mut lesson = &s[..i];
+    let i = lesson.find("\">").unwrap();
+    lesson = &lesson[i + 2..].trim_ascii();
 
-	let end = s.find("eventRender").unwrap();
-	s = s[..end].trim_ascii_end().strip_suffix("],").unwrap();
-
-	let start = s.find("[").unwrap();
-	s = &s[start + 1..];
-
-	println!("{}", s)
+    println!("{}", outside)
 }
