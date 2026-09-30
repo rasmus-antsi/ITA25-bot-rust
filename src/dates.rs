@@ -1,4 +1,13 @@
-use chrono::{Datelike, Days, NaiveDate, Weekday};
+use chrono::{DateTime, Datelike, Days, NaiveDate, Utc, Weekday};
+use chrono_tz::Europe::Tallinn;
+
+pub fn date_in_tallinn(now: DateTime<Utc>) -> NaiveDate {
+    now.with_timezone(&Tallinn).date_naive()
+}
+
+pub fn today_in_tallinn() -> NaiveDate {
+    date_in_tallinn(Utc::now())
+}
 
 /// The Monday of the week that contains `date`.
 pub fn monday_of(date: NaiveDate) -> NaiveDate {
@@ -78,5 +87,22 @@ mod tests {
         assert_eq!(parse_date("31.02.2026", today), None);
         assert_eq!(parse_date("hello", today), None);
         assert_eq!(parse_date("", today), None);
+    }
+
+    fn utc(s: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+    }
+
+    #[test]
+    fn tallinn_date_is_ahead_of_utc_in_the_evening() {
+        // Summer time (UTC+3): 21:30 UTC is already 00:30 the next day.
+        assert_eq!(date_in_tallinn(utc("2026-09-30T21:30:00Z")), d(2026, 10, 1));
+        assert_eq!(date_in_tallinn(utc("2026-09-30T20:30:00Z")), d(2026, 9, 30));
+        // Winter time (UTC+2): 22:30 UTC is 00:30 the next day.
+        assert_eq!(date_in_tallinn(utc("2026-12-31T22:30:00Z")), d(2027, 1, 1));
+        assert_eq!(
+            date_in_tallinn(utc("2026-12-31T21:30:00Z")),
+            d(2026, 12, 31)
+        );
     }
 }

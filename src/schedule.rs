@@ -99,6 +99,7 @@ fn nadal_param(date: NaiveDate) -> String {
 pub struct Week {
     pub timetable: Arc<Timetable>,
     pub stale: bool,
+    pub age: Duration,
 }
 
 struct Entry {
@@ -131,6 +132,7 @@ impl Schedule {
                 return Ok(Week {
                     timetable: Arc::clone(&entry.timetable),
                     stale: false,
+                    age: entry.fetched_at.elapsed(),
                 });
             }
         }
@@ -148,6 +150,7 @@ impl Schedule {
                 Ok(Week {
                     timetable,
                     stale: false,
+                    age: Duration::ZERO,
                 })
             }
             Err(err) => match cache.get(&monday) {
@@ -156,6 +159,7 @@ impl Schedule {
                     Ok(Week {
                         timetable: Arc::clone(&entry.timetable),
                         stale: true,
+                        age: entry.fetched_at.elapsed(),
                     })
                 }
                 None => Err(err),
