@@ -23,12 +23,12 @@ async fn ping(ctx: Context<'_>) -> Result<(), Error>{
 
 #[poise::command(slash_command)]
 async fn uptime(ctx: Context<'_>) -> Result<(), Error> {
-	let uptime = ctx.data().uptime.elapsed();
+	let uptime = ctx.data().uptime.elapsed().as_secs();
 
-	let seconds = uptime.as_secs() % 60;
-	let minutes = uptime.as_secs() / 60 % 60;
-	let hours = uptime.as_secs() / 3600 % 24;
-	let days = uptime.as_secs() / 86400;
+	let seconds = uptime % 60;
+	let minutes = uptime / 60 % 60;
+	let hours = uptime / 3600 % 24;
+	let days = uptime / 86400;
 
 	let message = format!("I've been up for {}d {}h {}m {}s", days, hours, minutes, seconds);
 	ctx.say(message).await?;
