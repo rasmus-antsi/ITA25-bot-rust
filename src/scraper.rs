@@ -3,7 +3,7 @@ use std::fmt;
 use chrono::{DateTime, FixedOffset};
 use serde::Deserialize;
 
-use crate::timetable::{Lesson, Location};
+use crate::timetable::{Lesson, Location, Timetable};
 
 #[derive(Debug, Deserialize)]
 pub struct RawEvent {
@@ -369,5 +369,28 @@ mod tests {
             eventRender"#;
         assert_eq!(parse_page(html).unwrap().len(), 2);
         assert!(matches!(parse_lessons(html), Err(ScrapeError::BadTitle(_))));
+    }
+
+    #[test]
+    fn fixture_friday_has_parallel_slots() {
+        let timetable = Timetable::new(parse_lessons(FIXTURE).unwrap());
+        let friday = chrono::NaiveDate::from_ymd_opt(2026, 10, 2).unwrap();
+        let slots = timetable.slots_on(friday);
+
+        let sizes: Vec<usize> = slots.iter().map(|s| s.lessons.len()).collect();
+        assert_eq!(sizes, vec![1, 4, 1]);
+
+        let parallel: Vec<&str> = slots[1].lessons.iter().map(|l| l.subject.as_str()).collect();
+        assert_eq!(parallel, vec!["Prantsuse keel", "Saksa keel", "Soome keel", "Stereomeetria I"]);
+    }
+
+    #[test]
+    fn fixture_has_lessons_every_weekday() {
+        let timetable = Timetable::new(parse_lessons(FIXTURE).unwrap());
+        assert_eq!(timetable.len(), 20);
+        for day in 28..=30 {
+            let date = chrono::NaiveDate::from_ymd_opt(2026, 9, day).unwrap();
+            assert!(!timetable.lessons_on(date).is_empty(), "no lessons on {date}");
+        }
     }
 }

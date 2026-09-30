@@ -2,6 +2,7 @@ use poise::serenity_prelude as serenity;
 
 mod scraper;
 mod timetable;
+mod dates;
 
 struct Data {
     uptime: std::time::Instant,
