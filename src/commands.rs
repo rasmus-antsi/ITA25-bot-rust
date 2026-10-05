@@ -3,6 +3,7 @@ use poise::serenity_prelude as serenity;
 
 use crate::render::{self, DayView};
 use crate::{Context, Error, GROUP_NAME, dates};
+use crate::schedule::error_chain;
 
 fn to_embed(view: DayView) -> serenity::CreateEmbed {
     let mut embed = serenity::CreateEmbed::new()
@@ -30,7 +31,7 @@ async fn show_day(ctx: Context<'_>, date: NaiveDate) -> Result<(), Error> {
             render::render_day(date, &slots, GROUP_NAME, week.age, week.stale)
         }
         Err(err) => {
-            eprintln!("timetable fetch failed: {err}");
+            eprintln!("timetable fetch failed: {}", error_chain(&err));
             render::error_view(date, GROUP_NAME)
         }
     };

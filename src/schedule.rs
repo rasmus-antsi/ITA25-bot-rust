@@ -21,10 +21,23 @@ pub enum FetchError {
 impl fmt::Display for FetchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FetchError::Http(e) => write!(f, "could not fetch the timetable: {e}"),
-            FetchError::Scrape(e) => write!(f, "could not read the timetable page: {e}"),
+			FetchError::Http(_) => write!(f, "could not fetch the timetable"),
+			FetchError::Scrape(_) => write!(f, "could not read the timetable page"),
         }
     }
+}
+
+/// Prints an error together with everything that caused it:
+/// `outer: middle: innermost`.
+pub fn error_chain(err: &dyn std::error::Error) -> String {
+    let mut text = err.to_string();
+    let mut source = err.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
 }
 
 impl std::error::Error for FetchError {
